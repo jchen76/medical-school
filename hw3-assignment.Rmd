@@ -1,0 +1,459 @@
+---
+title: "Homework 3: University Academic Scorecard"
+output: html_document
+---
+
+#### Preface 
+
+* **This homework is due Friday October 26, 2018 at 11:59 PM**. 
+* When you have completed the assignment, knit the R Markdown, commit your changes and push to GitHub.
+* If you do not include axis labels and plot titles, then points will be deducted.
+* If you do not include prose/text after the sections titled "Add a summary of your findings here", then points will be deducted. 
+* As as reminder, you can use up to two late days (if available) on this assignment without any penalty (see [Syllabus](https://jhu-advdatasci.github.io/2018/syllabus.html) on course website for more details on Late Day Policy).
+* You are welcome and encouraged to discuss homework problems with others in order to better understand it, but the work you turn in must be your own. You must write your own code, data analyses, and communicate and explain the results in your own words and with your own visualizations. **All students turning in plagiarized solutions will be reported to Office of Academic Integrity, and will fail the assignment**.
+
+# Motivation 
+
+You are a high school student applying to colleges
+and you think you are interested in getting a Bachelor's 
+in a health related field. 
+
+Upon some googling, you are quickly overwhelmed 
+at the sheer number of health related programs that exist.
+Also, your parents have graciously offered to pay for
+four years of college, but need you stay within a $50,000
+budget (including everything e.g. tuition, fees, room and 
+board, books, etc). 
+
+Your parents told you that in 2013, President Obama 
+announced that his administration would create a 
+"[college scorecard](https://collegescorecard.ed.gov)
+that parents and students can use to compare schools 
+based on a simple criteria-where you an get the most
+bang for your educational buck." 
+[link to quote](https://www.brookings.edu/opinions/understanding-the-college-scorecard/). 
+
+Your goal in this homework assignment is to explore the 
+landscape of colleges (various criteria and cost) that 
+have health related programs and identify a group of colleges 
+that you would interested in applying to while staying 
+within your budget. 
+
+## Data 
+
+The data that we will use are:
+
+* [College Scorecard Data](https://collegescorecard.ed.gov/data/): The College Scorecard Database records summary information of over 7000 colleges and universities in details, which includes location, size, admission SAT score, degrees, graduation rate and so on. Here, instead of using the full data, we explore the most recent data, which can be [downloaded here](https://ed-public-download.app.cloud.gov/downloads/Most-Recent-Cohorts-All-Data-Elements.csv). (Notice that the data set is 132MB.) 
+* Explanations of the column names can be found [here](https://collegescorecard.ed.gov/assets/CollegeScorecardDataDictionary.xlsx).
+* Your are welcome to incorporate other data into your analysis, if necessary, as long as those other data sources are documented and their origin is clear.
+
+
+## Problem 1: Exploring the Data
+
+Read in the the College Scorecard Data and 
+call it `univ_scorecard`. Filter out 
+universities with a highest degree lower 
+than Bachelor's degree and remove them (because 
+we want to get a Bachelor degree). Then, using 
+the columns containing information about the 
+average cost of attendance (academic year 
+institutions), use exploratory data analysis 
+(i.e. must include a plot here)
+tools to see if there a difference in 
+distributions of cost among public institutes, 
+private nonprofit institutes and private 
+for-profit institutes? 
+
+Based on your budget (up to $50,000 a year), 
+filter out universities outside of your budget. 
+How many universities remain in your search scope?
+
+**Hint**: 
+
+1. You can refer to the data dictionary 
+([download here](https://collegescorecard.ed.gov/assets/CollegeScorecardDataDictionary.xlsx)) 
+for explanations of column names. 
+2. Missing values can be omitted.
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(include = TRUE, comment = NA, warning = FALSE, message = FALSE)
+library(knitr)
+```
+
+```{r}
+library(tidyverse)
+
+# Download data
+file_url <- paste0("https://ed-public-download.app.cloud.gov/downloads/Most-Recent-Cohorts-All-Data-Elements.csv")
+
+if(!file.exists("data/collegescorecard.csv")){
+  dir.create("./data")
+  download.file(file_url, destfile = "./data/collegescorecard.csv", mode = "wb")
+}
+
+# Import data 
+univ_scorecard <- read_csv(file = "./data/collegescorecard.csv", 
+                           col_types = cols(COSTT4_A = col_double()))
+
+# Remove universities with highest degree lower than bachelors
+univ_scorecard <- univ_scorecard %>% filter(HIGHDEG >= 3) 
+```
+
+```{r, fig.align = 'center'}
+# Create boxplots of average attendance costs across institute type
+#     (public, private non-profit, private for-profit)
+#     also drop schools with NA values
+univ_scorecard %>% 
+  select(CONTROL, COSTT4_A) %>% 
+  drop_na() %>%
+  ggplot(aes(x = factor(CONTROL), y = COSTT4_A)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Average Attendance Cost (per academic year) by Institute Type", 
+       x = "Institute Type", y = "Average Cost of Attendance (per academic year)") +
+  scale_x_discrete(labels = c("1" = "Public", "2" = "Private Non-Profit", 
+                              "3" = "Private For-Profit")) +
+  theme_bw()
+```
+
+<span style = "color:blue" > From the box plots, we see that the average cost of attendance varies greatly by the institute type. Public institutions, on average, have a lower cost of attendance per academic year in comparison to private institutions. Private non-profit institutions have the largest range regarding the cost of attendance. </span>
+
+```{r}
+# Filter out schools with cost greater than $50,000 a year
+univ_scorecard %>% filter(COSTT4_A <= 50000) %>% nrow()
+```
+
+<span style = "color:blue" > After filtering out universities with an average cost of attendance greater than \$50,000,  we are left with 1,947 schools. </span>
+
+## Problem 2: Identifying universities with health related degrees
+
+### Problem 2.1 
+
+As you are mostly considering getting a degree in 
+a health related field, you want to identify 
+groups of colleges that have a high percentage of
+degrees awarded for health related fields. Read 
+about the data columns from the data dictionary 
+that are related to percentage of degrees awarded. 
+
+In which field does the Johns Hopkins University have 
+the most degrees awarded? What is the percentage? 
+Is the Johns Hopkins University in your budget?
+
+```{r}
+# Look at the field in which the Johns Hopkins University has the most degrees awarded
+univ_scorecard %>% filter(INSTNM == "Johns Hopkins University") %>%
+  select(grep("PCIP", names(univ_scorecard))) %>%
+  gather("Category", "Percentage") %>%
+  mutate(Percentage = as.numeric(Percentage)) %>%
+  arrange(desc(Percentage)) %>%
+  head(5)
+
+# Check the cost of attendance for the Johns Hopkins University
+univ_scorecard %>% filter(INSTNM == "Johns Hopkins University") %>%
+  select(COSTT4_A)
+```
+
+#### Add a summary of your findings here
+<span style = "color:blue" > From the table above, we see that the Johns Hopkins University awards the most degrees to the field corresponding to `PCIP51`: health professions and related programs. Of all degrees awarded at the Johns Hopkins University, 24.6\% of the degrees were in the field of health professions and related programs. However, the Johns Hopkins University is not within my budget as the annual cost of attendance per academic year is \$65,473. </span>
+
+### Problem 2.2
+
+For universities within our search scope (defined 
+in Problem 1) and using the data about the 
+percentage of degrees award in different fields, 
+use dimensionality reduction methods and 
+apply unsupervised methods (e.g. clustering approaches)
+to explore and identify groups of universities 
+that you might be interested in applying to. Are 
+there groups of universities that cluster together? 
+If so, how many groups? What do they cluster by?
+
+For example, you could start about by using PCA 
+and plot the universities along the first two PCs and
+color them by percent of degrees awarded in 
+"Health Professions and Related Programs". Are the
+loadings useful? 
+
+To get full credit, a complete response 
+should include: (1) the application of at least
+one dimensionality reduction method to explore
+the most informative features in this data, (2) the 
+application of at least one unsupervised analysis
+(e.g. k-means) to identify groups of universities, 
+(3) data visualizations or summary statistics, and
+(4) a summary of your findings. 
+
+<span style = "color:blue" > Suppose I am interested in describing schools by the fields that they award degrees to. Then, my data consists of a list of schools with the percentage of degrees awarded to each field. I will use PCR to reduce the dimension of the data from the number of fields, 38, to something smaller. </span>
+```{r, fig.align='center'}
+# Subset the data
+univ_scorecard_filtered <- univ_scorecard %>%
+  filter(COSTT4_A <= 50000) %>%
+  select(INSTNM, grep("PCIP", names(univ_scorecard))) %>%
+  mutate_at(vars(grep("PCIP", names(univ_scorecard), value = TRUE)), 
+            funs(as.numeric))
+
+# Change to matrix
+univ_filt_mat <- as.matrix(univ_scorecard_filtered[,-1])
+
+# Identify PCs
+pc <- prcomp(univ_filt_mat, center = TRUE, scale = TRUE)
+
+# Look at the amount of variance explained by the first 10 PCs
+summary(pc)$importance[,1:10]
+```
+
+<span style = "color:blue" > From the loadings, we can derive the proportion of variability described by the first 10 principal components. We see that collectively, the first 10 PCs explain approximately 44\% of the total variance in the data. Now, suppose we are interested in looking at each university plotted on PC1 and PC2, where each university is colored by its percentage of degrees awarded in health-related fields. </span>
+
+```{r, fig.align='center'}
+# Plot University by PCs
+data.frame(PC1 = pc$x[,1], PC2 = pc$x[,2], 
+           pdh = univ_scorecard_filtered$PCIP51) %>%
+  ggplot(aes(x = PC1, y = PC2, color = pdh)) +
+  geom_point() +
+  labs(title = "Universities plotted on the first two PC", 
+       color = "% Health-related Degrees") +
+  theme_bw()
+```
+
+<span style = "color:blue" > From the above graph, we see that schools with a high percentages of degrees awarded to health-related fields seem to cluster around high PC1 values and low PC2 values. Furthermore, it looks like as PC1 increases and PC2 decreases, the percent of degrees awarded to health-related fields increases. </span>
+
+<span style = "color:blue" > To explore whether universities cluster together by their percent of degrees awarded in different fields, we can use k-means clustering with 4 clusters. </span>
+
+```{r, fig.align='center'}
+# K-means clustering with K = 4
+set.seed(1000) # for reproducibility
+km <- kmeans(univ_filt_mat, centers = 4)
+
+# Add PC1, PC2, and Cluster information to filtered df
+univ_scorecard_filtered <- univ_scorecard_filtered %>%
+  mutate(PC1 = pc$x[,1], PC2 = pc$x[,2], cluster = factor(km$cluster))
+
+# Plot clusters by PC
+univ_scorecard_filtered %>% ggplot(aes(x = PC1, y = PC2, color = cluster)) +
+  geom_point() +
+  labs(title = "Clusters of Universities by PCs") +
+  theme_bw()
+```
+
+<span style = "color:blue" > We see that the clusters seem to reflect categories of percentage of degrees awarded to health-related fields, as shown in the earlier plot of universities on PC1 and PC2, colored by percentage of degrees awarded to health-related fields. However, when we consider a plot of percent of degrees awarded to health related fields versus percent of degrees awarded to biological and bio medical sciences, we see that cluster assignment seems dependent on the percentage of degrees awarded to health-related fields and less on percentage of degrees awarded to biological and bio medical sciences. </span>
+
+```{r, fig.align='center'}
+# Plot PCIP51 and PCIP45
+univ_scorecard_filtered %>% ggplot(aes(x = PCIP51, y = PCIP26, color = cluster)) + 
+  geom_point() +
+  labs(title = "Clusters of universities by percentage of health-related and biological degrees",
+       x = "Percentage of health-related degrees", 
+       y = "Percentage of biological and biomedical degrees") +
+  theme_bw()
+```
+
+<span style = "color:blue" > If we consider a plot of percent of degrees awarded to health related fields versus percent of degrees awarded to theology and religious vocations, we see that cluster assignment seems highly dependent on both percentages. </span>
+
+```{r, fig.align = 'center'}
+# Plot clusters by PCIP51 (health) and PCIP39 (theology)
+univ_scorecard_filtered %>% ggplot(aes(x = PCIP51, y = PCIP39, color = cluster)) + 
+  geom_point() +
+  labs(title = "Clusters of universities by percentage of health-related and theology degrees",
+       x = "Percentage of health-related degrees", 
+       y = "Percentage of theology and religious vocation degrees") +
+  theme_bw()
+```
+
+#### Add a summary of your findings here
+<span style = "color:blue" > Using PCA, I reduced the dimension of the data from the number of fields, 38, to 2. From the plot of universities along PC1 and PC2, we see that universities with a high percentage of degrees awarded to health-related fields tend to cluster around high PC1 values and low PC2 values.  </span>
+
+<span style = "color:blue" > To identify groups of universities that I may want to attend to, I also performed k-means clustering with $k = 4$. From the graphs above, it seems the that clusters of universities identified are primarily determined using the percentage of degrees awarded to health-related field and theology and religious studies. With my interest in schools health-related programs, I may consider looking at schools in the fourth cluster (purple cluster) as schools in the purple cluster tend to have a large percentage of graduates in health-related degrees. </span>
+
+
+## Problem 3: What other features are most important to you? 
+
+In the data set, there are many other features that 
+may help you pick a university, for example,
+
+* admission rate and average SAT scores
+* completion rate
+* earnings after graduation
+* geography
+* size of university
+* type: e.g. public or private, single sex or coed, research vs teaching focused, religious affiliation
+* ....
+
+Explore other features that are most important to you
+in making a decision for colleges. 
+
+**Note**: There is no wrong answer. To get full credit, a 
+complete response should include: (1) the features you 
+are most interested in when considering universities,
+(2) the approach you took to identify 
+your topic choices, (3) data visualizations 
+or summary statistics, and (4) a summary of your 
+findings for this problem. 
+
+**Note**: You may also use data outside of the scorecard,
+as long as those other data sources are documented and 
+their origin is clear.
+
+<span style = "color:blue" > Suppose I am interested in universities that offer Bachelor's degrees in health-related fields and cost under \$50,000. In addition to these two criteria, I am interested in the following factors:
+
+* <span style = "color:blue" > __Eligiblity__: do I have reasonable standardized scores to apply to a given school? </span>
+* <span style = "color:blue" > __Affordability__: is the school affordable? Will I be able to afford the school without taking a bunch of loans? </span>
+* <span style = "color:blue" > __Quality of Institution__: do students tend to stay at the school and complete their degrees? How much does the school invest in their students? </span>
+* <span style = "color:blue" > __Future Prospects__: how are students doing after graduation? Are they in well-paying jobs? </span>
+
+<span style = "color:blue" > To address these four additional criteria, I decided to look at, </span>
+
+* <span style = "color:blue" > __Eligibility__ </span>: 
+    + <span style = "color:blue" >Average SAT score below 2130 and above 1200 </span>
+* <span style = "color:blue" > __Financial aid__: </span>
+    + <span style = "color:blue" >Average net price for $75,001 to $110,000 family income</span>
+    + <span style = "color:blue" >Median debt for students with family income $75,001 +</span>
+    + <span style = "color:blue" >Share of students who received a federal loan from school</span>
+* <span style = "color:blue" > __Institution__: </span>
+    + <span style = "color:blue" >Instructional expenditures per full-time equivalent student</span>
+    + <span style = "color:blue" >First time, full-time student retention rate at four-year institutions</span>
+    + <span style = "color:blue" >No religious affiliation</span>
+    + <span style = "color:blue" >Not an online university or for profit</span>
+    + <span style = "color:blue" >Predominant undergraduate degree awarded is a Bachelor's Degree</span>
+* <span style = "color:blue" > __Future Prospects__:</span>
+    + <span style = "color:blue" >Median earnings of students working and not enrolled 10 years after entry</span>
+    
+```{r}
+# Subset data to include the factors described above
+univ_filtered <- univ_scorecard %>%                            # Select eligible schools by school type
+  filter(PREDDEG == 3, DISTANCEONLY == 0, 
+         RELAFFIL == "NULL", CONTROL != 3) %>% 
+  select(INSTNM, CONTROL, COSTT4_A, PCIP51, SAT_AVG, 
+         grep("NPT44", names(univ_scorecard)), GRAD_DEBT_MDN, 
+         LOAN_EVER, INEXPFTE, RET_FT4, MD_EARN_WNE_P10) %>%
+  mutate_at(vars(-INSTNM, -CONTROL, -COSTT4_A), funs(as.numeric)) %>%
+  gather("NPT44_CAT","NPT44_VAL", NPT44_PUB,
+         NPT44_PRIV,NPT44_PROG,NPT44_OTHER) %>%
+  group_by(INSTNM, CONTROL, COSTT4_A, PCIP51, 
+           SAT_AVG, GRAD_DEBT_MDN, LOAN_EVER, 
+           INEXPFTE, RET_FT4, MD_EARN_WNE_P10) %>%
+  summarize(NPT44 = mean(NPT44_VAL, na.rm = TRUE)) %>%
+  drop_na() %>% ungroup() %>%
+  filter(COSTT4_A <= 50000, SAT_AVG <= 1480,                    # Select eligible schools by cost/SAT 
+         SAT_AVG >= 1200) %>%                
+  mutate(health.ranks = rank(PCIP51)/length(PCIP51),            # Percentile for health-related degree programs
+         future.ranks = rank(MD_EARN_WNE_P10)/                  # Percentile for future earnings
+           length(MD_EARN_WNE_P10)) %>%              
+  group_by(CONTROL) %>%
+  mutate(fin.ranks = (rank(-NPT44) + rank(-GRAD_DEBT_MDN) +      # Financial percentile
+                       rank(-LOAN_EVER))/(3*length(NPT44)),
+         ins.ranks = (rank(INEXPFTE) + rank(RET_FT4))/           # Institution percentile
+           (2*length(INEXPFTE))) %>%    
+  ungroup() %>%
+  mutate(sum.rating = (health.ranks + future.ranks +             # Sum of percentiles
+                         fin.ranks + ins.ranks)) %>%
+  arrange(desc(sum.rating))
+```
+
+<span style = "color:blue" > I first filtered all the universities based on the outlined inclusion criteria (e.g. SAT score, cost, university type, religious affiliation). From the remaining list of universities, I created an average percentile for each factor (financial aid, institution, future prospects) by taking the average of the rankings (where the higher the ranking, the better the characteristic), and dividing by the number of schools. For factors that are dependent on whether the school is public or non-profit, such as financial aid and institution, I first stratified by `CONTROL`, then ranked the school. We can see the distribution of the selected characteristics in the figure below. </span>
+
+```{r fig.align= 'center', fig.width = 10, fig.height = 6}
+# Names
+labels <- c(`PCIP51` = "Pct Health-Related Deg",
+            `COSTT4_A` = "Avg Attendance Cost",
+            `SAT_AVG` = "Avg SAT Score", 
+            `NPT44` = "Average Net Price",
+            `GRAD_DEBT_MDN` = "Median Debt",
+            `LOAN_EVER` = "Pct Students with Loans", 
+            `INEXPFTE` = "Instructional Expend per Student", 
+            `RET_FT4` = "Retention Rate", 
+            `MD_EARN_WNE_P10` = "Median Earnings (10yrs)")
+# Summary Figure
+univ_filtered %>% select(INSTNM, CONTROL, PCIP51, COSTT4_A, 
+                         SAT_AVG, NPT44, GRAD_DEBT_MDN, LOAN_EVER, 
+                         INEXPFTE, RET_FT4, MD_EARN_WNE_P10) %>%
+  gather(key = "Category", value = "Value", 3:11) %>%
+  ggplot(aes(x = factor(CONTROL), y = Value)) +
+  facet_wrap(Category~., scales = "free", labeller = as_labeller(labels)) +
+  geom_boxplot() + 
+  geom_point(aes(color = INSTNM)) +
+  scale_x_discrete(labels = c("1" = "Public", "2" = "Private Non-Profit")) +
+  labs(title = "Institution Factors by University Type", 
+       x = "Institute Type", y = "Reported Values") + 
+  guides(color = FALSE) +
+  theme_bw()
+```
+
+<span style = "color:blue" > After I created the percentiles for the four categories, I averaged the four percentiles to create one summary statistic. The top schools that fit my criteria are given in the table below:
+</span>
+```{r}
+univ_filtered %>% select(INSTNM, ends_with("ranks"), sum.rating) %>%
+  head(3)
+```
+
+## Problem 4: Narrative
+
+Given the results you produced in Problems 1-3,
+it's time to summarize your results and make a set of 
+recommendations for which colleges you want to apply 
+to with a health related program keeping in mind your 
+budget. 
+
+To get full credit for the problem, you will need the following: 
+
+* Write a one paragraph abstract summarizing your findings 
+from Problems 1-3 above. The paragraph should include 
+a set of recommendations for your top three choices of 
+colleges to apply to. 
+
+* Produce one summary figure/table/graphic/etc.
+that provides evidence supporting the recommendations made 
+in the abstract above.
+
+* Produce a figure/table/graphic/etc. that describes 
+other possible features that would be interesting to explore
+that would be useful in deciding which colleges to apply to
+given the criteria described in this assignment. 
+
+* Write one paragraph outlining the limitations of your 
+analysis and what could be done in the future to address
+those limitations.
+
+#### Abstract
+Suppose I am a student who is interested in getting a health-related Bachelor's degree. Using the university scorecard data set, I filtered schools based on my concerns regarding eligibility, affordability, quality of institution, and future prospects. After removing schools that were too expensive or did not offer Bachelor's degrees, I looked at whether I could identify groups of universities that I may be interested in. Using k-means clustering with $k = 4$, it seemed like groups were mostly determined by percent of degrees awarded to health-related fields and percent of degrees awarded in theology or religious studies. In problem 3, I identified nine characteristics that would be useful in answering my concerns. After excluding schools based on religious affiliation, SAT score, cost, and university type, I ranked the remaining universities by in each of the nine-characteristics. Then, I averaged the rankings and divided by the number of universities to get an estimated percentile for each characteristic. The characteristics under each category of concern were then averaged to get an average percentile, and the sum of the category percentiles were then used to rank the universities. The top three schools with the highest final rankings were (1) University of North Carolina at Chapel Hill, (2) University of California - Berkeley, and (3) University of California - Irvine.
+
+#### Summary Table
+Below is the table with the percentiles ranking how health-focused a university is (`health.ranks`), how well they prepare students for the future (`future.ranks`), the quality of financial aid provided (`fin.ranks`), and the quality of the institution(`ins.ranks`). The last column (`sum.rating`), which was used to rank the universities, is the sum of all the category percentiles. We see that schools that rank poorly in one category may compensate in other categories. 
+```{r}
+univ_filtered %>% select(INSTNM, ends_with("ranks"), sum.rating) %>% 
+  head(3) %>% 
+  kable()
+```
+
+#### Additional Features to Explore
+In addition to looking at SAT scores, I may be interested in looking at the region of each institution and its surrounding environment. Below is a plot of each region and the distribution of its surrounding environment. 
+
+```{r, fig.align='center', fig.width=12}
+univ_scorecard %>%
+  filter(PREDDEG == 3, DISTANCEONLY == 0, 
+         RELAFFIL == "NULL", CONTROL != 3, COSTT4_A <= 50000, 
+         as.numeric(SAT_AVG)<=1480, as.numeric(SAT_AVG)>1200) %>%
+  select(INSTNM, REGION, LOCALE) %>%
+  drop_na() %>%
+  ggplot(aes(x = as.factor(REGION))) +
+  geom_bar(aes(fill = as.factor(LOCALE))) +
+  labs(title = "Distribution of University Locale by Region", 
+       x = "Region", y = "Number of Universities") +
+  scale_x_discrete(labels = c("0" = "US Service Schools", "1" = "New England", 
+                              "2" = "Mid-East", "3" = "Great Plains",
+                              "4" = "Plains", "5" = "Southeast", 
+                              "6" = "Southwest", "7" = "Rocky Mountains", 
+                              "8" = "Far West")) +
+  scale_fill_discrete(name = "Locale", 
+                    labels = c("11" = "City: Large", "12" = "City: Midsize",
+                               "13" = "City: Small", "21" = "Suburb: Large", 
+                               "22" = "Suburb: Midsize", "23" = "Suburb: Small", 
+                               "31" = "Town: Fringe", "32" = "Town: Distant", 
+                               "33" = "Town: Remote")) 
+  
+  
+```
+
+#### Limitations
+One limitation of my analysis is that there was no weighting in the summation of the percentiles; each of the concern categories were weighted equally. In reality my desire to go to a school with good programs in health-related fields may affect how much weight I put into financial aid. Alternatively, if the future prospects from graduating from a particular university are significantly higher in comparison to other universities, then I may be more willing to take out additional loans. To address this limitation, I could weight the categories or the characteristics within each category when I take the average percentiles and total percentiles. 
+
+An additional limitation is that I only looked at the means for each characteristic and not the variance. For example, two schools may have similar average attendance costs per year, but one school may have a smaller variance than the other, making it preferable over its competitor. Thus, rather than using the default tiebreaker for ranks, I could use the variance for each characteristic to order universities in my statistic. 
